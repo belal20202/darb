@@ -1,0 +1,309 @@
+extends Node
+## Global state, catalog, missions data, save/load.
+
+const SAVE_PATH := "user://darb_save.json"
+
+var money: int = 1500000
+var owned_vehicles: Array = []
+var owned_weapons: Array = []
+var owned_clothes: Array = ["shirt_white", "pants_black"]
+var outfit: Dictionary = {"shirt": "shirt_white", "pants": "pants_black", "head": ""}
+var weapon_equipped: String = ""
+var mission_index: int = 0
+var hours: float = 8.0
+var quality: int = 2
+var busy: bool = false
+var joy: Vector2 = Vector2.ZERO
+var next_scene: String = "res://scenes/world.tscn"
+var hud = null
+## If cars drive backwards in your Godot build, change this to -1.0
+var engine_sign: float = 1.0
+var font: Font
+var lights = null
+var night: float = 0.0
+var day: int = 0
+var season: int = 0
+var _ui: AudioStreamPlayer
+var _loaded_once: bool = false
+
+var items: Array = []
+var landmarks: Array = []
+var givers: Array = ["أبو علي", "الحاج كاظم", "أم حيدر", "الأستاذ ليث", "سعد", "أبو زينب", "نور", "مصطفى", "أبو محمد", "الدكتورة رند"]
+var story: Array = []
+
+func _ready() -> void:
+	font = load("res://fonts/DejaVuSans.ttf")
+	_setup_input()
+	_build_items()
+	_build_landmarks()
+	_build_story()
+
+func _setup_input() -> void:
+	var map := {
+		"move_forward": [KEY_W, KEY_UP], "move_back": [KEY_S, KEY_DOWN],
+		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
+		"interact": [KEY_E, KEY_F], "brake": [KEY_SPACE], "jump": [KEY_SPACE], "horn": [KEY_H], "phone": [KEY_TAB],
+	}
+	for a in map:
+		if not InputMap.has_action(a):
+			InputMap.add_action(a)
+		for k in map[a]:
+			var e := InputEventKey.new()
+			e.physical_keycode = k
+			InputMap.action_add_event(a, e)
+
+func play_ui(n: String) -> void:
+	if _ui == null:
+		_ui = AudioStreamPlayer.new()
+		add_child(_ui)
+	_ui.stream = Sfx.get_sound(n)
+	_ui.volume_db = -4.0
+	_ui.play()
+
+func move_vec() -> Vector2:
+	var v := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if joy.length() > v.length():
+		v = joy
+	return v
+
+func fmt(n: int) -> String:
+	var s := str(absi(n))
+	var out := ""
+	var c := 0
+	for i in range(s.length() - 1, -1, -1):
+		out = s[i] + out
+		c += 1
+		if c % 3 == 0 and i > 0:
+			out = "," + out
+	return out + " د.ع"
+
+# ---------------------------------------------------------------- catalog
+func _build_items() -> void:
+	items = [
+		{"id": "pistol", "cat": "weapon", "name": "مسدس", "price": 1500000},
+		{"id": "shotgun", "cat": "weapon", "name": "بندقية صيد", "price": 3500000},
+		{"id": "smg", "cat": "weapon", "name": "رشاش خفيف", "price": 4500000},
+		{"id": "rifle", "cat": "weapon", "name": "بندقية آلية", "price": 9000000},
+		{"id": "shirt_white", "cat": "cloth", "slot": "shirt", "name": "دشداشة بيضاء", "price": 0, "color": Color(0.94, 0.94, 0.92), "robe": true},
+		{"id": "shirt_blue", "cat": "cloth", "slot": "shirt", "name": "قميص أزرق", "price": 45000, "color": Color(0.2, 0.4, 0.8)},
+		{"id": "shirt_red", "cat": "cloth", "slot": "shirt", "name": "قميص أحمر", "price": 35000, "color": Color(0.75, 0.12, 0.12)},
+		{"id": "shirt_green", "cat": "cloth", "slot": "shirt", "name": "قميص أخضر", "price": 40000, "color": Color(0.15, 0.5, 0.25)},
+		{"id": "shirt_black", "cat": "cloth", "slot": "shirt", "name": "قميص أسود", "price": 50000, "color": Color(0.08, 0.08, 0.1)},
+		{"id": "suit", "cat": "cloth", "slot": "shirt", "name": "بدلة رسمية", "price": 600000, "color": Color(0.12, 0.13, 0.2)},
+		{"id": "pants_black", "cat": "cloth", "slot": "pants", "name": "بنطلون أسود", "price": 0, "color": Color(0.08, 0.08, 0.09)},
+		{"id": "pants_jeans", "cat": "cloth", "slot": "pants", "name": "جينز", "price": 60000, "color": Color(0.2, 0.3, 0.5)},
+		{"id": "pants_beige", "cat": "cloth", "slot": "pants", "name": "بنطلون بيج", "price": 55000, "color": Color(0.72, 0.62, 0.45)},
+		{"id": "head_ghutra", "cat": "cloth", "slot": "head", "name": "غترة وعقال", "price": 90000, "head": "ghutra"},
+		{"id": "scooter", "cat": "bike", "name": "سكوتر", "price": 1200000, "bike": true, "color": Color(0.9, 0.5, 0.1), "dim": Vector3(0.6, 1.0, 1.7), "power": 650.0, "max_speed": 20.0, "mass": 160.0},
+		{"id": "moto", "cat": "bike", "name": "دراجة نارية", "price": 4500000, "bike": true, "color": Color(0.1, 0.1, 0.12), "dim": Vector3(0.7, 1.0, 2.1), "power": 1200.0, "max_speed": 38.0, "mass": 230.0},
+		{"id": "sedan", "cat": "car", "name": "سيدان عائلية", "price": 12000000, "color": Color(0.72, 0.74, 0.8), "dim": Vector3(1.8, 1.3, 4.3), "power": 2300.0, "max_speed": 38.0, "mass": 1100.0},
+		{"id": "taxi", "cat": "car", "name": "تكسي (أبيض وبرتقالي)", "price": 15000000, "taxi": true, "color": Color(0.96, 0.96, 0.96), "dim": Vector3(1.8, 1.3, 4.3), "power": 2300.0, "max_speed": 36.0, "mass": 1100.0},
+		{"id": "pickup", "cat": "car", "name": "بيك أب", "price": 20000000, "color": Color(0.78, 0.58, 0.25), "dim": Vector3(2.0, 1.6, 5.0), "power": 2800.0, "max_speed": 32.0, "mass": 1700.0},
+		{"id": "suv", "cat": "car", "name": "دفع رباعي", "price": 28000000, "color": Color(0.12, 0.18, 0.14), "dim": Vector3(2.0, 1.6, 4.8), "power": 3000.0, "max_speed": 34.0, "mass": 1900.0},
+		{"id": "sport", "cat": "car", "name": "سيارة رياضية", "price": 55000000, "color": Color(0.8, 0.1, 0.1), "dim": Vector3(1.9, 1.2, 4.4), "power": 3600.0, "max_speed": 52.0, "mass": 1200.0},
+	]
+
+func item(id: String) -> Dictionary:
+	for it in items:
+		if it["id"] == id:
+			return it
+	return {}
+
+func items_of(cats: Array) -> Array:
+	var out: Array = []
+	for it in items:
+		if cats.has(it["cat"]):
+			out.append(it)
+	return out
+
+func is_owned(id: String) -> bool:
+	var it := item(id)
+	if it.is_empty():
+		return false
+	match it["cat"]:
+		"weapon": return owned_weapons.has(id)
+		"cloth": return owned_clothes.has(id)
+		_: return owned_vehicles.has(id)
+
+## returns "" on success or an error message
+func buy(id: String) -> String:
+	var it := item(id)
+	if it.is_empty():
+		return "غير موجود"
+	if is_owned(id):
+		return "تملكه من قبل"
+	if money < int(it["price"]):
+		return "فلوسك ما تكفي"
+	money -= int(it["price"])
+	match it["cat"]:
+		"weapon": owned_weapons.append(id)
+		"cloth": owned_clothes.append(id)
+		_: owned_vehicles.append(id)
+	return ""
+
+func equip(id: String) -> void:
+	var it := item(id)
+	if it.is_empty():
+		return
+	if it["cat"] == "weapon":
+		weapon_equipped = "" if weapon_equipped == id else id
+	elif it["cat"] == "cloth":
+		var slot: String = it["slot"]
+		if slot == "head" and outfit["head"] == id:
+			outfit["head"] = ""
+		else:
+			outfit[slot] = id
+
+func apply_outfit(model: HumanModel) -> void:
+	var sh := item(outfit["shirt"])
+	var pa := item(outfit["pants"])
+	var hd := item(outfit["head"]) if outfit["head"] != "" else {}
+	var shirt_c: Color = sh.get("color", Color.WHITE)
+	var pants_c: Color = pa.get("color", Color.BLACK)
+	var head_k: String = hd.get("head", "")
+	model.build(shirt_c, pants_c, Color(0.78, 0.6, 0.45), sh.get("robe", false), head_k)
+	model.set_weapon(weapon_equipped)
+
+# ---------------------------------------------------------------- landmarks & missions
+func _build_landmarks() -> void:
+	var data := [
+		["مخبز أبو علي", Vector2i(-3, -2)], ["مقهى الشناشيل", Vector2i(-2, -1)], ["ساحة الرافدين", Vector2i(0, 0)],
+		["مول الرافدين", Vector2i(1, 1)], ["سوق الشورجة", Vector2i(-1, 1)], ["مطعم الفرات", Vector2i(2, 0)],
+		["جامعة دجلة", Vector2i(3, -1)], ["مستشفى الحياة", Vector2i(-4, 1)], ["جسر الكرخ", Vector2i(4, 3)],
+		["كراج النهضة", Vector2i(2, -3)], ["محطة الوقود", Vector2i(-1, -3)], ["حديقة الأمة", Vector2i(0, 3)],
+		["جامع الإمام", Vector2i(-3, 3)], ["فندق الشط", Vector2i(3, 2)], ["مدينة الألعاب", Vector2i(-4, -4)],
+		["مكتب البريد", Vector2i(1, -1)], ["صيدلية الشفاء", Vector2i(-2, 3)], ["ملعب الشعب", Vector2i(4, -4)],
+	]
+	landmarks.clear()
+	for d in data:
+		landmarks.append({"name": d[0], "grid": d[1]})
+
+func lm_dist(a: int, b: int) -> float:
+	var ga: Vector2i = landmarks[a]["grid"]
+	var gb: Vector2i = landmarks[b]["grid"]
+	return Vector2(ga - gb).length() * Nav.B
+
+func _build_story() -> void:
+	story = [
+		{"title": "أول مشوار", "giver": "أبو علي", "from": 0, "to": 1, "vehicle": false, "reward": 150000,
+		 "intro": [["أبو علي", "هلا بيك ابني! أني أبو علي صاحب المخبز. اليوم المحل مزدحم وما أگدر أترك التنور."],
+				   ["أبو علي", "خذ هاي الصمونات الحارة وسلّمها لصاحب مقهى الشناشيل، وبعدها أعطيك أجرتك."]],
+		 "outro": [["صاحب المقهى", "الله يخليك! صمون أبو علي ما ينتسى. هاك هاي الأجرة."]]},
+		{"title": "أوراق مهمة", "giver": "الأستاذ ليث", "from": 1, "to": 3, "vehicle": false, "reward": 250000,
+		 "intro": [["الأستاذ ليث", "أنت الشاب اللي يشتغل مشاوير؟ عندي أوراق ضرورية لازم توصل مول الرافدين."],
+				   ["الأستاذ ليث", "الشارع طويل شوية، إذا عندك سكوتر أسرع. المحلات بالمول تبيع كل شي."]],
+		 "outro": [["موظف المول", "وصلت الأوراق! شكراً إلك. تگدر تتجول بالمول وتشتري دراجة أو ملابس."]]},
+		{"title": "اشتري دراجتك", "giver": "أبو علي", "from": 3, "to": 5, "vehicle": true, "reward": 350000,
+		 "intro": [["أبو علي", "شفتك تمشي على رجلك طول اليوم! روح لمحل الدراجات واشتري سكوتر."],
+				   ["أبو علي", "بعدين خذ هاي الوجبة لمطعم الفرات، لازم تكون بسيارة أو دراجة حتى تبقى حارة."]],
+		 "outro": [["صاحب المطعم", "يعطيك العافية! الوجبة وصلت سخنة. تنتظرك مشاوير أكثر."]]},
+		{"title": "التكسي", "giver": "الحاج كاظم", "from": 5, "to": 2, "vehicle": true, "reward": 450000,
+		 "intro": [["الحاج كاظم", "ابني، شغل التكسي أحسن شغل بالمدينة. اشتري تكسي من المعرض وخذ ركاب."],
+				   ["الحاج كاظم", "أو بس اطلب تكسي من التلفون إذا تريد توصل لمكان وتتعب."]],
+		 "outro": [["الحاج كاظم", "هذا مفتاح الرزق! افتح التلفون وابدأ شغل التكسي."]]},
+	]
+
+func make_mission(i: int) -> Dictionary:
+	if i < story.size():
+		return story[i]
+	var r := RandomNumberGenerator.new()
+	r.seed = 7919 * (i + 1)
+	var n := landmarks.size()
+	var a := r.randi_range(0, n - 1)
+	var b := r.randi_range(0, n - 1)
+	if b == a:
+		b = (a + 5) % n
+	var giver: String = givers[r.randi() % givers.size()]
+	var kind := r.randi() % 5
+	var dest: String = landmarks[b]["name"]
+	var title := ""
+	var intro: Array = []
+	var outro: Array = []
+	var vehicle := false
+	match kind:
+		0:
+			title = "توصيل طرد"
+			intro = [[giver, "عندي طرد لازم يوصل %s اليوم. تگدر تلحگه؟" % dest], [giver, "دير بالك عليه، فيه أغراض مهمة."]]
+			outro = [["المستلم", "الله يعافيك، وصل سليم! هاي الأجرة."]]
+		1:
+			title = "طلبية أكل"
+			vehicle = true
+			intro = [[giver, "الزبون ينتظر الأكل بـ %s. لازم بسيارة حتى ما يبرد." % dest], [giver, "يلا، كل دقيقة تفرق!"]]
+			outro = [["الزبون", "حار وبوقته! تستاهل بخشيش."]]
+		2:
+			title = "راكب مستعجل"
+			vehicle = true
+			intro = [[giver, "أحتاج أوصل %s بأسرع وقت، عندي موعد." % dest], [giver, "سوق على كيفك بس لا تتأخر."]]
+			outro = [[giver, "سلمت إيدك، لحگت الموعد. هاي أجرتك مع زيادة."]]
+		3:
+			title = "تسليم مستندات"
+			intro = [[giver, "هاي ملفات الدائرة، سلمها لـ %s." % dest], [giver, "ولا تضيعها ابني."]]
+			outro = [["الموظف", "تمام، استلمتها. تفضل أجرتك."]]
+		_:
+			title = "جلب أغراض"
+			vehicle = true
+			intro = [[giver, "كلمني صديقي بـ %s يريد أغراض من عندي. خذها له بسيارتك." % dest]]
+			outro = [["الصديق", "يا هلا بيك! شكراً على المشوار."]]
+	var reward := 90000 + int(lm_dist(a, b) * 350.0) + i * 2000
+	reward = (reward / 5000) * 5000
+	return {"title": title, "giver": giver, "from": a, "to": b, "vehicle": vehicle, "reward": reward, "intro": intro, "outro": outro}
+
+# ---------------------------------------------------------------- save / load
+func load_game_if_first() -> void:
+	if not _loaded_once:
+		_loaded_once = true
+		load_game()
+
+func has_save() -> bool:
+	return FileAccess.file_exists(SAVE_PATH)
+
+func reset_progress() -> void:
+	money = 1500000
+	owned_vehicles = []
+	owned_weapons = []
+	owned_clothes = ["shirt_white", "pants_black"]
+	outfit = {"shirt": "shirt_white", "pants": "pants_black", "head": ""}
+	weapon_equipped = ""
+	mission_index = 0
+	hours = 8.0
+	day = 0
+
+func save_game() -> void:
+	var d := {"money": money, "veh": owned_vehicles, "wep": owned_weapons, "clo": owned_clothes,
+		"outfit": outfit, "weapon": weapon_equipped, "mission": mission_index, "hours": hours, "quality": quality, "day": day}
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(d))
+
+func load_game() -> void:
+	if not has_save():
+		return
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var d = JSON.parse_string(f.get_as_text())
+	if typeof(d) != TYPE_DICTIONARY:
+		return
+	money = int(d.get("money", money))
+	owned_vehicles = d.get("veh", [])
+	owned_weapons = d.get("wep", [])
+	owned_clothes = d.get("clo", owned_clothes)
+	outfit = d.get("outfit", outfit)
+	weapon_equipped = d.get("weapon", "")
+	mission_index = int(d.get("mission", 0))
+	hours = float(d.get("hours", 8.0))
+	quality = int(d.get("quality", 2))
+	day = int(d.get("day", 0))
+
+func apply_quality() -> void:
+	var vp := get_viewport()
+	match quality:
+		0:
+			vp.msaa_3d = Viewport.MSAA_DISABLED
+			vp.scaling_3d_scale = 0.7
+		1:
+			vp.msaa_3d = Viewport.MSAA_DISABLED
+			vp.scaling_3d_scale = 0.85
+		_:
+			vp.msaa_3d = Viewport.MSAA_2X
+			vp.scaling_3d_scale = 1.0
