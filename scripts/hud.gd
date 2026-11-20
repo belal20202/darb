@@ -176,7 +176,23 @@ func _ready() -> void:
 	modal_box = VBoxContainer.new()
 	modal_box.add_theme_constant_override("separation", 8)
 	modal.add_child(modal_box)
+	_grow(top, 2, 1)
+	_grow(mission_l, 0, 1)
+	_grow(phone, 0, 1)
+	_grow(act_btn, 0, 0)
+	_grow(brake_btn, 0, 0)
+	_grow(jump_btn, 0, 0)
+	_grow(horn_btn, 0, 0)
+	_grow(toast_l, 2, 1)
+	_grow(weather_l, 2, 1)
+	_grow(dlg_panel, 2, 0)
+	_grow(modal, 2, 2)
+	_grow(joystick, 1, 0)
 	set_money()
+
+func _grow(c: Control, h: int, v: int) -> void:
+	c.grow_horizontal = h as Control.GrowDirection
+	c.grow_vertical = v as Control.GrowDirection
 
 func _process(delta: float) -> void:
 	if _toast_t > 0.0:
