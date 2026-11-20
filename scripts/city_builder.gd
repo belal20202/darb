@@ -9,7 +9,7 @@ uniform float night = 0.0;
 uniform float floor_h = 3.4;
 varying vec3 wpos;
 varying vec3 wnrm;
-float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+float h21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
@@ -24,7 +24,7 @@ void fragment() {
 		vec2 f = vec2(fract(u), fract(v));
 		bool win = f.x > 0.25 && f.x < 0.75 && f.y > 0.3 && f.y < 0.75 && v > 1.0;
 		if (win) {
-			float lit = step(0.55, hash(cell));
+			float lit = step(0.55, h21(cell));
 			col = mix(vec3(0.12, 0.2, 0.3), vec3(1.0, 0.85, 0.5), lit * night);
 			emis = lit * night;
 		}
@@ -287,8 +287,8 @@ func _houses(cx: float, cz: float) -> void:
 		for qz in [-1.0, 1.0]:
 			var h := 6.0 + float(rng.randi() % 3) * 3.4
 			var c: Color = PALETTE[rng.randi() % PALETTE.size()]
-			var px := cx + qx * 11.5
-			var pz := cz + qz * 11.5
+			var px: float = cx + qx * 11.5
+			var pz: float = cz + qz * 11.5
 			_solid(Vector3(px, 0.15 + h * 0.5, pz), Vector3(15.0, h, 15.0), _wall(c), true)
 			_solid(Vector3(px, 0.15 + h + 0.35, pz), Vector3(15.6, 0.7, 15.6), _flat(c.darkened(0.2)), false)
 			_solid(Vector3(px + 3.0, 0.15 + h + 1.2, pz + 3.0), Vector3(2.0, 1.6, 2.0), _flat(Color(0.7, 0.7, 0.72)), false)
@@ -297,7 +297,7 @@ func _towers(cx: float, cz: float) -> void:
 	for q in [-1.0, 1.0]:
 		var h := 22.0 + float(rng.randi() % 5) * 7.0
 		var c: Color = [Color(0.55, 0.62, 0.7), Color(0.7, 0.72, 0.75), Color(0.6, 0.5, 0.42)][rng.randi() % 3]
-		var px := cx + q * 12.0
+		var px: float = cx + q * 12.0
 		_solid(Vector3(px, 0.15 + h * 0.5, cz), Vector3(18.0, h, 30.0), _wall(c), true)
 		_solid(Vector3(px, 0.15 + h + 1.0, cz), Vector3(18.5, 2.0, 30.5), _flat(Color(0.35, 0.35, 0.38)), false)
 
@@ -321,8 +321,8 @@ func _mosque(cx: float, cz: float) -> void:
 	dome.scale = Vector3(1.0, 0.85, 1.0)
 	root.add_child(dome)
 	for q in [Vector2(-1, -1), Vector2(1, 1)]:
-		var mx := cx + q.x * 15.0
-		var mz := cz + q.y * 15.0
+		var mx: float = cx + q.x * 15.0
+		var mz: float = cz + q.y * 15.0
 		var cm := CylinderMesh.new()
 		cm.top_radius = 1.1
 		cm.bottom_radius = 1.5
