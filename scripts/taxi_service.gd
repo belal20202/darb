@@ -66,7 +66,7 @@ func _dest_chosen(idx: int) -> void:
 	var from_g := Nav.nearest_grid(hail_car.global_position)
 	var to_g: Vector2i = Game.landmarks[idx]["grid"]
 	var dist := Vector2(from_g - to_g).length() * Nav.B
-	ride_fare = 3000 + int(dist * 60.0)
+	ride_fare = 1000 + int(dist * 12.0)
 	if from_g == to_g:
 		_on_dest(hail_car)
 		return
@@ -142,7 +142,7 @@ func _process(delta: float) -> void:
 				marker.global_position = Nav.grid_to_pos(Game.landmarks[dest]["grid"]))
 		else:
 			var dist := Game.lm_dist(pickup, dest)
-			var fare := 25000 + int(dist * 400.0)
+			var fare := 1500 + int(dist * 28.0)
 			world.hud.say([["الراكب", "سلمت إيدك! تفضل الأجرة."]], func():
 				Game.money += fare
 				world.hud.set_money()
