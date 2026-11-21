@@ -11,6 +11,10 @@ var missions: MissionManager
 var taxi: TaxiService
 var lights: TrafficLights
 var weather: Weather
+var quality_mgr: QualityManager
+var vehicles: Array = []
+var cull_dist: float = 70.0
+var _cull_t: float = 0.0
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var sky_mat: ProceduralSkyMaterial
@@ -44,6 +48,9 @@ func _ready() -> void:
 	hud = HUD.new()
 	hud.world = self
 	add_child(hud)
+	quality_mgr = QualityManager.new()
+	quality_mgr.world = self
+	add_child(quality_mgr)
 	weather = Weather.new()
 	weather.world = self
 	add_child(weather)
@@ -53,15 +60,16 @@ func _ready() -> void:
 	taxi = TaxiService.new()
 	taxi.world = self
 	add_child(taxi)
+	quality_mgr.apply()
 	missions.begin()
 	for id in Game.owned_vehicles:
 		spawn_owned(id)
-	_spawn_peds(24)
-	_spawn_traffic(8)
+	_spawn_peds([10, 14, 18][Game.tier])
+	_spawn_traffic([4, 6, 8][Game.tier])
 	_update_sky()
 	hud.set_time(Game.hours)
 	hud.show_driving(false)
-	hud.say([["أبو علي", "صباح الخير ابني! أهلاً بيك بدرب الرافدين. اتبع العلامة الخضراء على الخريطة الصغيرة لتبدأ أول مشوار."]])
+	hud.say([["أبو علي", "صباح الخير ابني! أهلاً بيك بدرب الرافدين. اتبع السهم الأخضر أعلى الشاشة لتبدأ أول مشوار."]])
 
 # ---------------------------------------------------------------- environment / time
 func _setup_environment() -> void:
@@ -72,15 +80,19 @@ func _setup_environment() -> void:
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.62, 0.66, 0.74)
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	sky.radiance_size = Sky.RADIANCE_SIZE_32
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.fog_enabled = true
 	env.fog_density = 0.0012
 	we.environment = env
 	add_child(we)
 	sun = DirectionalLight3D.new()
-	sun.shadow_enabled = Game.quality >= 1
-	sun.directional_shadow_max_distance = 120.0
+	sun.shadow_enabled = false
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_max_distance = 80.0
 	add_child(sun)
 	moon = DirectionalLight3D.new()
 	moon.light_color = Color(0.55, 0.65, 1.0)
@@ -90,6 +102,8 @@ func _setup_environment() -> void:
 	var sm := SphereMesh.new()
 	sm.radius = 14.0
 	sm.height = 28.0
+	sm.radial_segments = 16
+	sm.rings = 8
 	moon_mesh.mesh = sm
 	var mm := StandardMaterial3D.new()
 	mm.albedo_color = Color(0.95, 0.95, 0.85)
@@ -137,7 +151,10 @@ func _update_sky() -> void:
 	sky_mat.sky_horizon_color = hz
 	sky_mat.ground_horizon_color = hz
 	sky_mat.ground_bottom_color = Color(0.1, 0.09, 0.08).lerp(Color(0, 0, 0), night)
-	env.ambient_light_energy = lerpf(1.0, 0.35, night) * (1.0 - 0.3 * cl) + weather.flash * 3.0
+	var amb := Color(0.62, 0.66, 0.74).lerp(Color(0.1, 0.12, 0.2), night)
+	amb = amb.lerp(Color(0.5, 0.52, 0.55) * (1.0 - night * 0.8), cl * 0.5)
+	env.ambient_light_color = amb
+	env.ambient_light_energy = lerpf(1.0, 0.8, night) + weather.flash * 3.0
 	env.fog_density = 0.0012 + mist * 0.012 + rain * 0.004 + dust * 0.014
 	env.fog_light_color = hz
 	city.set_night(night)
@@ -166,6 +183,10 @@ func _process(delta: float) -> void:
 		do_interact()
 	if Input.is_action_just_pressed("phone"):
 		hud.open_phone()
+	_cull_t += delta
+	if _cull_t > 0.5:
+		_cull_t = 0.0
+		_cull()
 	_save_t += delta
 	if _save_t > 60.0:
 		_save_t = 0.0
@@ -175,7 +196,7 @@ var _sky_t: float = 0.0
 var _hud_t: float = 0.0
 func _update_sky_slow() -> void:
 	_sky_t += 0.1
-	if _sky_t >= 0.3:
+	if _sky_t >= 0.5:
 		_sky_t = 0.0
 		_update_sky()
 	_hud_t += 0.1
@@ -192,6 +213,8 @@ func make_marker(c: Color) -> Node3D:
 	cm.top_radius = 2.0
 	cm.bottom_radius = 2.0
 	cm.height = 40.0
+	cm.radial_segments = 16
+	cm.rings = 1
 	mi.mesh = cm
 	mi.position = Vector3(0, 20, 0)
 	var m := StandardMaterial3D.new()
@@ -205,21 +228,18 @@ func make_marker(c: Color) -> Node3D:
 	add_child(n)
 	return n
 
-func map_markers() -> Array:
-	var out: Array = []
+func current_target() -> Variant:
 	if missions and missions.marker and missions.marker.visible:
-		out.append({"pos": missions.marker.global_position, "color": Color(0.2, 0.9, 0.4)})
+		return missions.marker.global_position
 	if taxi and taxi.marker and taxi.marker.visible:
-		out.append({"pos": taxi.marker.global_position, "color": Color(1, 0.85, 0.1)})
-	if in_shop < 0:
-		for d in city.doors:
-			out.append({"pos": d["pos"], "color": Color(0.4, 0.6, 1.0)})
-	return out
+		return taxi.marker.global_position
+	return null
 
 func _make_vehicle(spec: Dictionary) -> Vehicle:
 	var v := Vehicle.new()
 	add_child(v)
 	v.setup(spec)
+	vehicles.append(v)
 	return v
 
 func spawn_owned(id: String) -> void:
@@ -278,6 +298,17 @@ func _spawn_peds(n: int) -> void:
 		p.setup(cs, rng.randi() % 4, Color(rng.randf(), rng.randf(), rng.randf()), Color(0.12, 0.12, 0.16) if rng.randf() < 0.6 else Color(0.2, 0.3, 0.5))
 		_peds.append(p)
 
+func _cull() -> void:
+	var pp := player.global_position
+	for p in _peds:
+		if is_instance_valid(p):
+			var vis: bool = pp.distance_to(p.global_position) < cull_dist and in_shop < 0
+			p.visible = vis
+			p.set_physics_process(vis)
+	for v in vehicles:
+		if is_instance_valid(v):
+			v.visible = in_shop < 0 and pp.distance_to(v.global_position) < cull_dist * 1.6
+
 func despawn_later(node: Node, secs: float) -> void:
 	get_tree().create_timer(secs).timeout.connect(func():
 		if is_instance_valid(node):
@@ -323,9 +354,8 @@ func _update_prompt() -> void:
 				var dd := pp.distance_to(d["pos"])
 				if dd < 3.0:
 					_add_cand(dd, "دخول: " + city.shops[d["shop"]]["name"], _enter_shop.bind(int(d["shop"])))
-			for child in get_children():
-				var cv := child as Vehicle
-				if cv != null:
+			for cv in vehicles:
+				if is_instance_valid(cv):
 					var vd := pp.distance_to(cv.global_position)
 					if vd < 4.5:
 						if cv.owned:
