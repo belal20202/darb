@@ -20,6 +20,7 @@ var rain: float = 0.0
 var dust: float = 0.0
 var mist: float = 0.0
 var flash: float = 0.0
+var fx_scale: float = 1.0
 var _timer: float = 60.0
 var _thunder_t: float = 15.0
 var _fx: GPUParticles3D
@@ -103,7 +104,7 @@ func _process(delta: float) -> void:
 	if pl != null:
 		_fx.global_position = pl.global_position + Vector3(0, 14, 0)
 	_fx.emitting = rain > 0.05 and world.in_shop < 0
-	_fx.amount_ratio = clampf(rain, 0.05, 1.0)
+	_fx.amount_ratio = clampf(rain * fx_scale, 0.05, 1.0)
 	var indoors: bool = world.in_shop >= 0
 	_set_snd(_rain_snd, rain > 0.03 and not indoors, lerpf(-40.0, -8.0, rain))
 	_set_snd(_wind_snd, dust > 0.05 and not indoors, lerpf(-40.0, -6.0, dust))
