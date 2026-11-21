@@ -46,16 +46,20 @@ func _ready() -> void:
 	box.add_child(bar)
 	var bad := _broken_scripts()
 	if not bad.is_empty():
-		_fail("فشل تحميل هذه الملفات (فيها أخطاء برمجية):\n" + "\n".join(bad))
+		_fail("فشل تحميل هذه الملفات:\n" + "\n".join(bad))
 		return
 	ResourceLoader.load_threaded_request(Game.next_scene)
 
 func _broken_scripts() -> Array:
 	var bad: Array = []
 	for n in SCRIPTS:
-		var sc = load("res://scripts/%s.gd" % n)
+		var path := "res://scripts/%s.gd" % n
+		if not ResourceLoader.exists(path):
+			bad.append(n + ".gd  (الملف غير موجود)")
+			continue
+		var sc = load(path)
 		if sc == null or not (sc is GDScript) or not sc.can_instantiate():
-			bad.append(n + ".gd")
+			bad.append(n + ".gd  (فيه خطأ برمجي)")
 	return bad
 
 func _fail(msg: String) -> void:
