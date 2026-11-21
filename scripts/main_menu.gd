@@ -60,7 +60,7 @@ func _ready() -> void:
 		Game.reset_progress()
 		_play()))
 	quality_btn = _button("", func():
-		Game.quality = (Game.quality + 1) % 3
+		Game.quality = (Game.quality + 1) % 4
 		Game.apply_quality()
 		_refresh_quality())
 	box.add_child(quality_btn)
@@ -82,7 +82,7 @@ func _button(t: String, cb: Callable) -> Button:
 	return b
 
 func _refresh_quality() -> void:
-	var names := ["منخفضة", "متوسطة", "عالية"]
+	var names := ["منخفضة", "متوسطة", "عالية", "تلقائي (حسب جهازك)"]
 	quality_btn.text = "الجودة: " + names[Game.quality]
 
 func _play() -> void:
