@@ -27,13 +27,14 @@ func build(root: Node3D, poles_body: StaticBody3D) -> void:
 	var pos: Array = []
 	for gx in range(-Nav.N, Nav.N + 1):
 		for gz in range(-Nav.N, Nav.N + 1):
-			for sx in [-1.0, 1.0]:
-				for sz in [-1.0, 1.0]:
-					pos.append(Vector3(gx * Nav.B + sx * (Nav.R + 2.5), 0.0, gz * Nav.B + sz * (Nav.R + 2.5)))
+			for sg in [-1.0, 1.0]:
+				pos.append(Vector3(gx * Nav.B + sg * (Nav.R + 2.5), 0.0, gz * Nav.B + sg * (Nav.R + 2.5)))
 	var pole := CylinderMesh.new()
 	pole.top_radius = 0.08
 	pole.bottom_radius = 0.1
 	pole.height = 5.5
+	pole.radial_segments = 8
+	pole.rings = 1
 	var mp := MultiMesh.new()
 	mp.transform_format = MultiMesh.TRANSFORM_3D
 	mp.mesh = pole
@@ -57,6 +58,8 @@ func build(root: Node3D, poles_body: StaticBody3D) -> void:
 	var lamp := SphereMesh.new()
 	lamp.radius = 0.17
 	lamp.height = 0.34
+	lamp.radial_segments = 8
+	lamp.rings = 4
 	var cols := {"r": Color(1, 0.1, 0.05), "y": Color(1, 0.75, 0.1), "g": Color(0.1, 1, 0.3)}
 	var hts := {"r": 5.5, "y": 5.1, "g": 4.7}
 	for axis in ["ns", "ew"]:
