@@ -5,10 +5,10 @@ const TIPS := [
 	"اضغط الزر الأخضر للدخول إلى المحلات وشراء الأسلحة والملابس والسيارات.",
 	"ما تگدر تسرق السيارات: اشتغل، اجمع فلوس، واشتري سيارتك أو دراجتك.",
 	"من الهاتف تگدر تطلب تكسي من الشارع أو تبدأ شغل التكسي بسيارتك.",
-	"اتبع العلامات الخضراء على الخريطة لتنجز المهام وتاخذ الأجرة.",
+	"اتبع السهم الأخضر لتنجز المهام وتاخذ الأجرة.",
 ]
 const SCRIPTS := ["nav", "human_model", "character", "sfx", "vehicle", "pedestrian", "player", "city_builder",
-	"traffic_lights", "weather", "missions", "taxi_service", "joystick", "minimap", "hud", "world"]
+	"traffic_lights", "weather", "missions", "taxi_service", "joystick", "compass", "quality_manager", "hud", "world"]
 
 var bar: ProgressBar
 var box: VBoxContainer
