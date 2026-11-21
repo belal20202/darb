@@ -31,6 +31,5 @@ func _gui_input(e: InputEvent) -> void:
 		queue_redraw()
 
 func _draw() -> void:
-	draw_circle(_center, RADIUS, Color(1, 1, 1, 0.12))
-	draw_arc(_center, RADIUS, 0, TAU, 40, Color(1, 1, 1, 0.4), 3.0)
-	draw_circle(_center + _knob, 40.0, Color(1, 1, 1, 0.45))
+	draw_circle(_center, RADIUS, Color(1, 1, 1, 0.07))
+	draw_circle(_center + _knob, 40.0, Color(1, 1, 1, 0.40))
