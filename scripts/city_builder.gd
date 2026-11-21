@@ -53,6 +53,8 @@ var ground_mat: StandardMaterial3D
 var park_mat: StandardMaterial3D
 var crown_mat: StandardMaterial3D
 var shop_lights: Array = []
+var _batches: Dictionary = {}
+var _body: StaticBody3D
 
 const GROUND := [Color(0.62, 0.64, 0.42), Color(0.78, 0.66, 0.45), Color(0.7, 0.58, 0.4), Color(0.55, 0.56, 0.46)]
 const GRASS := [Color(0.3, 0.6, 0.25), Color(0.5, 0.55, 0.25), Color(0.55, 0.45, 0.2), Color(0.25, 0.42, 0.28)]
@@ -100,24 +102,38 @@ func set_season(i: int) -> void:
 	park_mat.albedo_color = GRASS[i]
 	crown_mat.albedo_color = CROWN[i]
 
-func _solid(pos: Vector3, size: Vector3, mat: Material, collide: bool = true) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
-	mi.material_override = mat
-	mi.position = pos
-	mi.visibility_range_end = 280.0
-	root.add_child(mi)
+func _solid(pos: Vector3, size: Vector3, mat: Material, collide: bool = true) -> void:
+	var key := mat.get_instance_id()
+	if not _batches.has(key):
+		_batches[key] = {"mat": mat, "xf": []}
+	(_batches[key]["xf"] as Array).append(Transform3D(Basis().scaled(size), pos))
 	if collide:
-		var sb := StaticBody3D.new()
-		var cs := CollisionShape3D.new()
-		var bs := BoxShape3D.new()
-		bs.size = size
-		cs.shape = bs
-		sb.add_child(cs)
-		mi.add_child(sb)
-	return mi
+		_collider(pos, size)
+
+func _collider(pos: Vector3, size: Vector3) -> void:
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = size
+	cs.shape = bs
+	cs.position = pos
+	_body.add_child(cs)
+
+func _flush_batches() -> void:
+	var unit := BoxMesh.new()
+	unit.size = Vector3.ONE
+	for key in _batches:
+		var b: Dictionary = _batches[key]
+		var xf: Array = b["xf"]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = unit
+		mm.instance_count = xf.size()
+		for k in xf.size():
+			mm.set_instance_transform(k, xf[k])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.material_override = b["mat"]
+		root.add_child(mmi)
 
 func _label(text: String, pos: Vector3, px: float, color: Color = Color(1, 1, 1)) -> void:
 	var l := Label3D.new()
@@ -147,11 +163,14 @@ func build(r: Node3D) -> void:
 	set_season(Game.season)
 	poles_body = StaticBody3D.new()
 	root.add_child(poles_body)
+	_body = StaticBody3D.new()
+	root.add_child(_body)
 	_ground_and_roads()
 	for i in range(-Nav.N, Nav.N):
 		for j in range(-Nav.N, Nav.N):
 			_build_block(i, j)
 	_finish_trees_and_lights()
+	_flush_batches()
 	_boundary()
 
 func _ground_and_roads() -> void:
@@ -203,9 +222,9 @@ func _ground_and_roads() -> void:
 func _boundary() -> void:
 	var e := Nav.N * Nav.B + Nav.R + 3.0
 	for s in [Vector3(0, 10, e), Vector3(0, 10, -e)]:
-		_solid(s, Vector3(e * 2 + 6, 20, 2), _flat(Color.WHITE), true).visible = false
+		_collider(s, Vector3(e * 2 + 6, 20, 2))
 	for s in [Vector3(e, 10, 0), Vector3(-e, 10, 0)]:
-		_solid(s, Vector3(2, 20, e * 2 + 6), _flat(Color.WHITE), true).visible = false
+		_collider(s, Vector3(2, 20, e * 2 + 6))
 
 func _build_block(i: int, j: int) -> void:
 	var half := Nav.B * 0.5 - Nav.R
@@ -315,6 +334,8 @@ func _mosque(cx: float, cz: float) -> void:
 	var sm := SphereMesh.new()
 	sm.radius = 9.0
 	sm.height = 18.0
+	sm.radial_segments = 24
+	sm.rings = 12
 	dome.mesh = sm
 	dome.material_override = _flat(Color(0.1, 0.55, 0.6), 0.3)
 	dome.position = Vector3(cx, 0.15 + 12.0, cz)
@@ -327,22 +348,20 @@ func _mosque(cx: float, cz: float) -> void:
 		cm.top_radius = 1.1
 		cm.bottom_radius = 1.5
 		cm.height = 30.0
+		cm.radial_segments = 12
+		cm.rings = 1
 		var mn := MeshInstance3D.new()
 		mn.mesh = cm
 		mn.material_override = _flat(Color(0.93, 0.9, 0.82))
 		mn.position = Vector3(mx, 15.15, mz)
 		root.add_child(mn)
-		var sb := StaticBody3D.new()
-		var cs := CollisionShape3D.new()
-		var bx := BoxShape3D.new()
-		bx.size = Vector3(2.6, 30.0, 2.6)
-		cs.shape = bx
-		sb.add_child(cs)
-		mn.add_child(sb)
+		_collider(Vector3(mx, 15.15, mz), Vector3(2.6, 30.0, 2.6))
 		var tip := MeshInstance3D.new()
 		var ts := SphereMesh.new()
 		ts.radius = 1.3
 		ts.height = 2.6
+		ts.radial_segments = 8
+		ts.rings = 4
 		tip.mesh = ts
 		tip.material_override = _flat(Color(0.9, 0.7, 0.2), 0.3)
 		tip.position = Vector3(mx, 31.5, mz)
@@ -357,6 +376,8 @@ func _park(cx: float, cz: float) -> void:
 	cm.top_radius = 4.0
 	cm.bottom_radius = 4.5
 	cm.height = 0.9
+	cm.radial_segments = 16
+	cm.rings = 1
 	fm.mesh = cm
 	fm.material_override = _flat(Color(0.5, 0.75, 0.85), 0.2)
 	fm.position = Vector3(cx, 0.6, cz)
@@ -367,9 +388,13 @@ func _finish_trees_and_lights() -> void:
 	trunk.top_radius = 0.18
 	trunk.bottom_radius = 0.28
 	trunk.height = 6.0
+	trunk.radial_segments = 8
+	trunk.rings = 1
 	var crown := SphereMesh.new()
 	crown.radius = 2.4
 	crown.height = 2.0
+	crown.radial_segments = 8
+	crown.rings = 4
 	var mt := MultiMesh.new()
 	mt.transform_format = MultiMesh.TRANSFORM_3D
 	mt.mesh = trunk
@@ -395,9 +420,13 @@ func _finish_trees_and_lights() -> void:
 	pole.top_radius = 0.1
 	pole.bottom_radius = 0.14
 	pole.height = 7.0
+	pole.radial_segments = 8
+	pole.rings = 1
 	var lamp := SphereMesh.new()
 	lamp.radius = 0.35
 	lamp.height = 0.7
+	lamp.radial_segments = 8
+	lamp.rings = 4
 	var mp := MultiMesh.new()
 	mp.transform_format = MultiMesh.TRANSFORM_3D
 	mp.mesh = pole
