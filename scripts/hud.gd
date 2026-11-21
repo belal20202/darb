@@ -13,7 +13,9 @@ var jump_btn: Button
 var horn_btn: Button
 var weather_l: Label
 var joystick: Joystick
-var minimap: Minimap
+var compass: Compass
+var sprint_btn: Button
+var cam_btn: Button
 var toast_l: Label
 var dlg_panel: PanelContainer
 var dlg_name: Label
@@ -62,12 +64,13 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 	Game.hud = self
-	# minimap (top-left)
-	minimap = Minimap.new()
-	minimap.world = world
-	minimap.custom_minimum_size = Vector2(170, 170)
-	root.add_child(minimap)
-	minimap.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 16)
+	# compass arrow (top centre, under the weather line)
+	compass = Compass.new()
+	compass.world = world
+	compass.custom_minimum_size = Vector2(130, 100)
+	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(compass)
+	compass.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 92)
 	# money + time (top centre)
 	var top := PanelContainer.new()
 	top.add_theme_stylebox_override("panel", style(Color(0, 0, 0, 0.5)))
@@ -88,12 +91,18 @@ func _ready() -> void:
 	mission_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(mission_l)
 	mission_l.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
-	mission_l.offset_top = 90
+	mission_l.offset_top = 150
 	mission_l.offset_left = -400
 	var phone := _btn("الهاتف", Vector2(130, 64))
 	root.add_child(phone)
 	phone.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
 	phone.pressed.connect(open_phone)
+	cam_btn = _btn("الكاميرا", Vector2(130, 56))
+	root.add_child(cam_btn)
+	cam_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+	cam_btn.offset_top = 84
+	cam_btn.offset_bottom = 140
+	cam_btn.pressed.connect(func(): world.player.cycle_camera())
 	# joystick
 	joystick = Joystick.new()
 	joystick.custom_minimum_size = Vector2(320, 320)
@@ -121,6 +130,15 @@ func _ready() -> void:
 	jump_btn.offset_bottom -= 120
 	jump_btn.button_down.connect(func(): Input.action_press("jump"))
 	jump_btn.button_up.connect(func(): Input.action_release("jump"))
+	sprint_btn = _btn("ركض", Vector2(160, 100), Color(0.55, 0.3, 0.1, 0.9))
+	root.add_child(sprint_btn)
+	sprint_btn.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 26)
+	sprint_btn.offset_top -= 120
+	sprint_btn.offset_bottom -= 120
+	sprint_btn.offset_left -= 180
+	sprint_btn.offset_right -= 180
+	sprint_btn.button_down.connect(func(): Input.action_press("sprint"))
+	sprint_btn.button_up.connect(func(): Input.action_release("sprint"))
 	horn_btn = _btn("هورن", Vector2(160, 100), Color(0.5, 0.4, 0.1, 0.9))
 	root.add_child(horn_btn)
 	horn_btn.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 26)
@@ -188,6 +206,9 @@ func _ready() -> void:
 	_grow(dlg_panel, 2, 0)
 	_grow(modal, 2, 2)
 	_grow(joystick, 1, 0)
+	_grow(sprint_btn, 0, 0)
+	_grow(cam_btn, 0, 1)
+	_grow(compass, 2, 1)
 	set_money()
 
 func _grow(c: Control, h: int, v: int) -> void:
@@ -222,6 +243,7 @@ func show_driving(on: bool) -> void:
 	brake_btn.visible = on
 	jump_btn.visible = not on
 	horn_btn.visible = on
+	sprint_btn.visible = not on
 
 func toast(t: String) -> void:
 	toast_l.text = t
