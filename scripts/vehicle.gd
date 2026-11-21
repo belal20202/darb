@@ -138,6 +138,8 @@ func setup(s: Dictionary) -> void:
 		cm.top_radius = wr
 		cm.bottom_radius = wr
 		cm.height = 0.25
+		cm.radial_segments = 14
+		cm.rings = 1
 		wm.mesh = cm
 		wm.rotation_degrees = Vector3(0, 0, 90)
 		wm.material_override = mat(Color(0.04, 0.04, 0.04), 1.0, 0.9)
@@ -177,22 +179,21 @@ func set_driver(model: Node3D) -> void:
 	var dim: Vector3 = spec["dim"]
 	add_child(model)
 	model.scale = Vector3.ONE * 0.85
+	var seat_y := 0.85 if is_bike else 0.7
+	var sx := 0.0 if is_bike else -dim.x * 0.24
+	var sz := 0.2 if is_bike else dim.z * 0.06
 	if model is PlayerCharacter:
-		var seat_y := 0.8 if is_bike else 0.54
-		var sx := 0.0 if is_bike else -dim.x * 0.24
-		var sz := 0.2 if is_bike else dim.z * 0.06
-		model.position = Vector3(sx, seat_y - 0.81, sz)
+		model.position = Vector3(sx, seat_y - PlayerCharacter.SIT_HIPS * 0.85, sz)
 		(model as PlayerCharacter).play("Sit", 0.0)
 		return
 	var hm := model as HumanModel
+	hm.position = Vector3(sx, seat_y - 0.82 * 0.85, sz)
+	hm.pose_seated()
 	if is_bike:
-		hm.position = Vector3(0, 0.12, 0.2)
-		hm.pose_seated()
-		hm.leg_l.rotation.x = 0.9
-		hm.leg_r.rotation.x = 0.9
-	else:
-		hm.position = Vector3(-dim.x * 0.24, 0.54 - 0.68, dim.z * 0.06)
-		hm.pose_seated()
+		hm.leg_l.rotation.x = 1.0
+		hm.leg_r.rotation.x = 1.0
+		hm.knee_l.rotation.x = -1.3
+		hm.knee_r.rotation.x = -1.3
 
 func remove_driver() -> void:
 	if driver != null:
