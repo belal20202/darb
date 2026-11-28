@@ -140,13 +140,21 @@ func pose_seated() -> void:
 func animate(speed: float, delta: float) -> void:
 	if seated:
 		return
-	_t += delta * (4.0 + speed * 1.6)
-	var amp := clampf(speed / 3.0, 0.0, 1.0) * 0.7
-	var s := sin(_t) * amp
-	var c := cos(_t) * amp
+	if speed < 0.05:
+		var k := clampf(10.0 * delta, 0.0, 1.0)
+		for n in [leg_l, leg_r, knee_l, knee_r, arm_l]:
+			n.rotation.x = lerpf(n.rotation.x, 0.0, k)
+		arm_r.rotation.x = lerpf(arm_r.rotation.x, 1.2 if armed else 0.0, k)
+		position.y = lerpf(position.y, 0.0, k)
+		return
+	var th := clampf(0.3 + 0.08 * speed, 0.3, 0.8)
+	_t += delta * speed / (th * 0.85)      # foot speed at mid-stance equals ground speed
+	var s := sin(_t) * th
+	var c := cos(_t) * th
 	leg_l.rotation.x = s
 	leg_r.rotation.x = -s
-	knee_l.rotation.x = -maxf(0.0, c) * 1.3
-	knee_r.rotation.x = -maxf(0.0, -c) * 1.3
-	arm_l.rotation.x = -s * 0.8
-	arm_r.rotation.x = 1.2 if armed else s * 0.8
+	knee_l.rotation.x = -maxf(0.0, c) * 1.4
+	knee_r.rotation.x = -maxf(0.0, -c) * 1.4
+	arm_l.rotation.x = -s * 0.9
+	arm_r.rotation.x = 1.2 if armed else s * 0.9
+	position.y = -0.82 * (1.0 - cos(th * absf(sin(_t))))
