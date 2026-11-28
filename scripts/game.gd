@@ -4,7 +4,7 @@ extends Node
 const SAVE_PATH := "user://darb_save.json"
 
 var money: int = 5000
-var owned_vehicles: Array = []
+var owned_vehicles: Array = ["mini"]
 var owned_weapons: Array = []
 var owned_clothes: Array = ["shirt_white", "pants_black"]
 var outfit: Dictionary = {"shirt": "shirt_white", "pants": "pants_black", "head": ""}
@@ -17,7 +17,7 @@ var busy: bool = false
 var joy: Vector2 = Vector2.ZERO
 var next_scene: String = "res://scenes/world.tscn"
 var hud = null
-## If cars drive backwards in your Godot build, change this to -1.0
+## Not used by the arcade car any more (kept for old saves)
 var engine_sign: float = 1.0
 var font: Font
 var lights = null
@@ -115,6 +115,7 @@ func _build_items() -> void:
 		{"id": "head_ghutra", "cat": "cloth", "slot": "head", "name": "غترة وعقال", "price": 20000, "head": "ghutra"},
 		{"id": "scooter", "cat": "bike", "name": "سكوتر", "price": 300000, "bike": true, "color": Color(0.9, 0.5, 0.1), "dim": Vector3(0.6, 1.0, 1.7), "power": 650.0, "max_speed": 20.0, "mass": 160.0},
 		{"id": "moto", "cat": "bike", "name": "دراجة نارية", "price": 1000000, "bike": true, "color": Color(0.1, 0.1, 0.12), "dim": Vector3(0.7, 1.0, 2.1), "power": 1200.0, "max_speed": 38.0, "mass": 230.0},
+		{"id": "mini", "cat": "car", "hidden": true, "name": "سيارتك الصغيرة", "price": 0, "color": Color(0.95, 0.75, 0.15), "dim": Vector3(1.6, 1.25, 3.4), "power": 1600.0, "max_speed": 28.0, "mass": 850.0},
 		{"id": "sedan", "cat": "car", "name": "سيدان عائلية", "price": 3000000, "color": Color(0.72, 0.74, 0.8), "dim": Vector3(1.8, 1.3, 4.3), "power": 2300.0, "max_speed": 38.0, "mass": 1100.0},
 		{"id": "taxi", "cat": "car", "name": "تكسي (أبيض وبرتقالي)", "price": 3500000, "taxi": true, "color": Color(0.96, 0.96, 0.96), "dim": Vector3(1.8, 1.3, 4.3), "power": 2300.0, "max_speed": 36.0, "mass": 1100.0},
 		{"id": "pickup", "cat": "car", "name": "بيك أب", "price": 5000000, "color": Color(0.78, 0.58, 0.25), "dim": Vector3(2.0, 1.6, 5.0), "power": 2800.0, "max_speed": 32.0, "mass": 1700.0},
@@ -131,7 +132,7 @@ func item(id: String) -> Dictionary:
 func items_of(cats: Array) -> Array:
 	var out: Array = []
 	for it in items:
-		if cats.has(it["cat"]):
+		if cats.has(it["cat"]) and not it.get("hidden", false):
 			out.append(it)
 	return out
 
@@ -192,6 +193,9 @@ func _build_landmarks() -> void:
 		["كراج النهضة", Vector2i(2, -3)], ["محطة الوقود", Vector2i(-1, -3)], ["حديقة الأمة", Vector2i(0, 3)],
 		["جامع الإمام", Vector2i(-3, 3)], ["فندق الشط", Vector2i(3, 2)], ["مدينة الألعاب", Vector2i(-4, -4)],
 		["مكتب البريد", Vector2i(1, -1)], ["صيدلية الشفاء", Vector2i(-2, 3)], ["ملعب الشعب", Vector2i(4, -4)],
+		["مصفى الدورة", Vector2i(6, 5)], ["حي السكن الشمالي", Vector2i(-6, -5)], ["الجامعة التقنية", Vector2i(5, -6)],
+		["سوق الكاظمية", Vector2i(-5, 6)], ["مطار بغداد", Vector2i(7, -7)], ["جسر الجمهورية", Vector2i(-7, 2)],
+		["حي الجامعة", Vector2i(6, 1)], ["مجمع الأمل", Vector2i(-6, -1)], ["ميناء النهر", Vector2i(0, -7)], ["قلعة المدينة", Vector2i(0, 7)],
 	]
 	landmarks.clear()
 	for d in data:
@@ -312,7 +316,7 @@ func has_save() -> bool:
 
 func reset_progress() -> void:
 	money = 5000
-	owned_vehicles = []
+	owned_vehicles = ["mini"]
 	owned_weapons = []
 	owned_clothes = ["shirt_white", "pants_black"]
 	outfit = {"shirt": "shirt_white", "pants": "pants_black", "head": ""}
@@ -338,7 +342,9 @@ func load_game() -> void:
 	if typeof(d) != TYPE_DICTIONARY:
 		return
 	money = int(d.get("money", money))
-	owned_vehicles = d.get("veh", [])
+	owned_vehicles = d.get("veh", ["mini"])
+	if not owned_vehicles.has("mini"):
+		owned_vehicles.append("mini")
 	owned_weapons = d.get("wep", [])
 	owned_clothes = d.get("clo", owned_clothes)
 	outfit = d.get("outfit", outfit)
