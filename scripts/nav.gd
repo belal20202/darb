@@ -4,7 +4,7 @@ extends RefCounted
 
 const B := 70.0   # distance between road centre lines
 const R := 9.0    # road half width
-const N := 4      # grid goes from -N..N on both axes
+const N := 7      # grid goes from -N..N on both axes
 
 static func grid_to_pos(g: Vector2i) -> Vector3:
 	return Vector3(g.x * B, 0.0, g.y * B)
