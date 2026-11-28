@@ -31,6 +31,7 @@ static func get_sound(n: String) -> AudioStreamWAV:
 		"rain": s = _rain()
 		"wind": s = _wind()
 		"thunder": s = _thunder()
+		"crash": s = _crash()
 		_: s = _coin()
 	_cache[n] = s
 	return s
@@ -44,7 +45,7 @@ static func _engine() -> AudioStreamWAV:
 		var v := 0.5 * sin(TAU * 90.0 * t) + 0.3 * sin(TAU * 180.0 * t + 0.5) + 0.2 * sin(TAU * 270.0 * t) + 0.12 * sin(TAU * 360.0 * t)
 		v *= 0.8 + 0.2 * sin(TAU * 30.0 * t)
 		v += 0.04 * (randf() * 2.0 - 1.0)
-		a[i] = v * 0.55
+		a[i] = v * 0.9
 	return _wav(a, true)
 
 static func _horn() -> AudioStreamWAV:
@@ -99,4 +100,15 @@ static func _coin() -> AudioStreamWAV:
 		var t := float(i) / RATE
 		var f := 880.0 if t < 0.1 else 1320.0
 		a[i] = sin(TAU * f * t) * exp(-t * 9.0) * 0.5
+	return _wav(a, false)
+
+static func _crash() -> AudioStreamWAV:
+	var n := int(RATE * 0.5)
+	var a := PackedFloat32Array()
+	a.resize(n)
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp = lp * 0.6 + (randf() * 2.0 - 1.0) * 0.4
+		a[i] = lp * exp(-t * 9.0) * 0.9 + sin(TAU * 70.0 * t) * exp(-t * 12.0) * 0.5
 	return _wav(a, false)
