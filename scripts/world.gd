@@ -29,6 +29,7 @@ var _cands: Array = []
 var _prompt_t: float = 0.0
 var _save_t: float = 0.0
 var _peds: Array = []
+var _exit_grace: float = 0.0
 
 func _ready() -> void:
 	rng.randomize()
@@ -65,11 +66,11 @@ func _ready() -> void:
 	for id in Game.owned_vehicles:
 		spawn_owned(id)
 	_spawn_peds([10, 14, 18][Game.tier])
-	_spawn_traffic([4, 6, 8][Game.tier])
+	_spawn_traffic([5, 8, 10][Game.tier])
 	_update_sky()
 	hud.set_time(Game.hours)
 	hud.show_driving(false)
-	hud.say([["أبو علي", "صباح الخير ابني! أهلاً بيك بدرب الرافدين. اتبع السهم الأخضر أعلى الشاشة لتبدأ أول مشوار."]])
+	hud.say([["أبو علي", "صباح الخير ابني! أهلاً بيك بدرب الرافدين. سيارتك الصغيرة واقفة قدام البيت. اتبع السهم الأخضر أعلى الشاشة لتبدأ أول مشوار."]])
 
 # ---------------------------------------------------------------- environment / time
 func _setup_environment() -> void:
@@ -85,6 +86,11 @@ func _setup_environment() -> void:
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	sky.radiance_size = Sky.RADIANCE_SIZE_32
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.adjustment_enabled = true
+	env.adjustment_contrast = 1.08
+	env.adjustment_saturation = 1.15
+	env.glow_enabled = false
+	env.glow_intensity = 0.6
 	env.fog_enabled = true
 	env.fog_density = 0.0012
 	we.environment = env
@@ -174,6 +180,10 @@ func _process(delta: float) -> void:
 		if ns != Game.season:
 			Game.season = ns
 			_apply_season()
+	if in_shop >= 0:
+		_exit_grace -= delta
+		if _exit_grace <= 0.0 and player.global_position.distance_to(interiors[in_shop]["exit"]) < 1.3:
+			_exit_shop()
 	_prompt_t += delta
 	if _prompt_t > 0.1:
 		_prompt_t = 0.0
@@ -265,7 +275,7 @@ func spawn_ai_vehicle(spec: Dictionary, g: Vector2i, route: Array, speed: float 
 		d.y = 0.0
 		yaw = Nav.yaw_for_dir(d.normalized())
 		pos = Vector3(first.x, 0.9, first.z) - d.normalized() * 16.0
-	pos.y = 0.9
+	pos.y = 0.0
 	v.global_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	var drv := HumanModel.new()
 	drv.build(Color(rng.randf(), rng.randf(), rng.randf()), Color(0.1, 0.1, 0.12), Color(0.75, 0.58, 0.45))
@@ -449,7 +459,18 @@ func _build_interior(idx: int) -> void:
 	lab.pixel_size = 0.012
 	lab.position = o + Vector3(0, 3.2, -d * 0.5 + 0.3)
 	add_child(lab)
-	interiors[idx] = {"origin": o, "keeper": o + Vector3(0, 0, -3.5), "exit": o + Vector3(0, 0, d * 0.5 - 1.5)}
+	_box(o + Vector3(0, 1.5, d * 0.5 - 0.3), Vector3(2.8, 3.0, 0.2), Vehicle.mat(Color(0.2, 0.6, 0.3)))
+	var exit_lab := Label3D.new()
+	exit_lab.text = "خروج"
+	exit_lab.font = Game.font
+	exit_lab.font_size = 96
+	exit_lab.pixel_size = 0.012
+	exit_lab.shaded = false
+	exit_lab.modulate = Color(0.6, 1, 0.7)
+	exit_lab.rotation.y = PI
+	exit_lab.position = o + Vector3(0, 3.5, d * 0.5 - 0.45)
+	add_child(exit_lab)
+	interiors[idx] = {"origin": o, "keeper": o + Vector3(0, 0, -3.5), "exit": o + Vector3(0, 0, d * 0.5 - 1.2)}
 
 func _box(pos: Vector3, size: Vector3, m: Material) -> void:
 	var mi := MeshInstance3D.new()
@@ -473,7 +494,8 @@ func _enter_shop(idx: int) -> void:
 	shop_return = player.global_position
 	in_shop = idx
 	var info: Dictionary = interiors[idx]
-	player.global_position = info["exit"] + Vector3(0, 0.3, -1.0)
+	player.global_position = info["exit"] + Vector3(0, 0.3, -3.2)
+	_exit_grace = 1.5
 	player.yaw = 0.0
 	player.velocity = Vector3.ZERO
 	missions.marker.visible = false
