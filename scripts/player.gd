@@ -3,11 +3,13 @@ extends CharacterBody3D
 ## On-foot controller + third-person camera. Uses the animated .glb character
 ## (falls back to the procedural HumanModel if the .glb is missing).
 
-const WALK := 3.4
-const RUN := 6.8
-const ACCEL := 20.0
+const WALK_MAX := 2.2
+const JOG := 4.2
+const SPRINT := 7.0
+const ACCEL := 26.0
 const GRAVITY := 24.0
-const JUMP_SPEED := 7.0
+const JUMP_SPEED := 6.5
+const CAM_DISTS := [3.4, 4.8, 6.8]
 
 var yaw: float = 0.0
 var pitch: float = -0.22
@@ -19,6 +21,7 @@ var ride_car: Vehicle = null
 var pivot: Node3D
 var arm: SpringArm3D
 var cam: Camera3D
+var cam_i: int = 1
 var _col: CollisionShape3D
 var _idle_look: float = 0.0
 
@@ -26,7 +29,8 @@ func _ready() -> void:
 	add_to_group("player")
 	collision_layer = 8
 	collision_mask = 1 | 2 | 4
-	floor_snap_length = 0.4
+	floor_snap_length = 0.5
+	floor_max_angle = deg_to_rad(60.0)
 	_col = CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.3
@@ -53,11 +57,11 @@ func _ready() -> void:
 	sph.radius = 0.3
 	arm.shape = sph
 	arm.collision_mask = 1
-	arm.spring_length = 4.8
+	arm.spring_length = CAM_DISTS[cam_i]
 	pivot.add_child(arm)
 	cam = Camera3D.new()
 	cam.fov = 70.0
-	cam.far = 450.0
+	cam.far = 260.0
 	cam.current = true
 	arm.add_child(cam)
 	pivot.global_position = global_position + Vector3(0, 1.5, 0)
@@ -65,6 +69,9 @@ func _ready() -> void:
 func refresh_model() -> void:
 	if model != null:
 		Game.apply_outfit(model)
+
+func cycle_camera() -> void:
+	cam_i = (cam_i + 1) % CAM_DISTS.size()
 
 func heading() -> float:
 	if vehicle != null:
@@ -146,12 +153,18 @@ func _walk(delta: float) -> void:
 	var mv := Vector2.ZERO
 	if not Game.busy:
 		mv = Game.move_vec()
-	var b := Basis(Vector3.UP, yaw)
-	var dir := b * Vector3(mv.x, 0.0, mv.y)
-	var top := WALK
-	if mv.length() > 0.85:
-		top = RUN
-	var want := dir * top * minf(mv.length(), 1.0)
+	var m := minf(mv.length(), 1.0)
+	var speed := 0.0
+	var dir := Vector3.ZERO
+	if m > 0.05:
+		if m < 0.6:
+			speed = m / 0.6 * WALK_MAX
+		else:
+			speed = lerpf(WALK_MAX, JOG, (m - 0.6) / 0.4)
+		if Input.is_action_pressed("sprint") and m > 0.3:
+			speed = SPRINT
+		dir = (Basis(Vector3.UP, yaw) * Vector3(mv.x, 0.0, mv.y)).normalized()
+	var want := dir * speed
 	velocity.x = move_toward(velocity.x, want.x, ACCEL * delta)
 	velocity.z = move_toward(velocity.z, want.z, ACCEL * delta)
 	if is_on_floor():
@@ -160,6 +173,12 @@ func _walk(delta: float) -> void:
 			velocity.y = JUMP_SPEED
 	else:
 		velocity.y -= GRAVITY * delta
+	if is_on_floor() and (absf(velocity.x) + absf(velocity.z)) > 0.1:
+		var step := Vector3(velocity.x, 0.0, velocity.z).normalized() * 0.4
+		if test_move(global_transform, step):
+			var up := global_transform.translated(Vector3(0, 0.22, 0))
+			if not test_move(up, step):
+				global_position.y += 0.2
 	move_and_slide()
 	var hs := Vector2(velocity.x, velocity.z).length()
 	if hs > 0.3:
@@ -171,10 +190,10 @@ func _walk(delta: float) -> void:
 
 func _update_camera(follow: Vector3, delta: float) -> void:
 	_idle_look += delta
-	var dist := 4.8
+	var dist: float = CAM_DISTS[cam_i]
 	var height := 1.5
 	if in_vehicle():
-		dist = 7.5
+		dist = CAM_DISTS[cam_i] + 2.7
 		height = 1.8
 		if _idle_look > 1.2 and Input.get_last_mouse_velocity().length() < 5.0:
 			yaw = lerp_angle(yaw, heading(), 1.8 * delta)
