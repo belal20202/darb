@@ -36,6 +36,7 @@ func apply() -> void:
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun.directional_shadow_max_distance = 45.0 if level == 2 else 80.0
 	world.player.cam.far = FAR[level]
+	world.env.glow_enabled = level >= 2
 	world.cull_dist = CULL[level]
 	if world.weather != null:
 		world.weather.fx_scale = RAIN[level]
