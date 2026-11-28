@@ -65,6 +65,9 @@ const SPECIAL := {
 	Vector2i(-1, 1): "clothes", Vector2i(3, -1): "clothes", Vector2i(-3, -2): "clothes_small", Vector2i(2, -3): "weapons",
 	Vector2i(-3, 2): "mosque", Vector2i(1, 2): "mosque", Vector2i(-1, -3): "park", Vector2i(3, 2): "park",
 	Vector2i(-3, -3): "home",
+	Vector2i(-5, -4): "car", Vector2i(4, 4): "bike", Vector2i(-6, 3): "clothes", Vector2i(5, -5): "weapons",
+	Vector2i(6, -2): "mosque", Vector2i(-5, 5): "park", Vector2i(5, 2): "park", Vector2i(-4, 6): "mosque",
+	Vector2i(3, 5): "clothes_small", Vector2i(-2, -6): "mall",
 }
 const PALETTE := [Color(0.85, 0.75, 0.58), Color(0.9, 0.85, 0.72), Color(0.78, 0.55, 0.4), Color(0.7, 0.7, 0.68), Color(0.92, 0.88, 0.8), Color(0.8, 0.65, 0.5)]
 const SIGNS := ["مطعم الشط", "صيدلية الشفاء", "مخبز السلام", "بقالة النور", "مكتبة بغداد", "مقهى الأصدقاء", "حلويات الزوراء", "مطعم دجلة"]
@@ -233,11 +236,11 @@ func _build_block(i: int, j: int) -> void:
 	blocks.append({"x0": cx - half, "x1": cx + half, "z0": cz - half, "z1": cz + half})
 	var kind: String = SPECIAL.get(Vector2i(i, j), "")
 	if kind == "":
-		var central: bool = absi(i) <= 1 and absi(j) <= 1
+		var dist := maxi(absi(i), absi(j))
 		var roll := rng.randf()
-		if central:
+		if dist <= 1:
 			kind = "tower"
-		elif roll < 0.35:
+		elif roll < (0.45 if dist <= 3 else 0.15):
 			kind = "com"
 		else:
 			kind = "res"
@@ -299,7 +302,7 @@ func _home(cx: float, cz: float, face_z: float) -> void:
 	_label("بيتك", Vector3(cx, 4.2, face_z + 0.2), 0.012, Color(0.6, 1, 0.7))
 	home_door = Vector3(cx, 0.15, face_z + 1.8)
 	for k in 8:
-		parking.append(Vector3(cx - 24.0 + k * 6.5, 0.9, cz + 23.0 + 5.5))
+		parking.append(Vector3(cx - 24.0 + k * 6.5, 0.0, cz + 23.0 + 5.5))
 
 func _houses(cx: float, cz: float) -> void:
 	for qx in [-1.0, 1.0]:
