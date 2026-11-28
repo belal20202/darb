@@ -1,6 +1,7 @@
 class_name Vehicle
-extends VehicleBody3D
-## Drivable / AI-driven car or bike. Forward is -Z.
+extends CharacterBody3D
+## Arcade car / bike. Kinematic (no wheel physics), so it never sinks, flips or drives backwards.
+## Forward is -Z. Steering positive = left.
 
 var spec: Dictionary = {}
 var vid: String = ""
@@ -13,18 +14,29 @@ var route: Array = []
 var route_done: Callable = Callable()
 var power: float = 2000.0
 var max_speed: float = 30.0
+var mass: float = 1000.0
 var cruise: float = 11.0
 var driver: Node3D = null
+var speed: float = 0.0
+var steer_ang: float = 0.0
+var wheelbase: float = 2.6
+var linear_velocity: Vector3:
+	get:
+		return velocity
 var _ray: RayCast3D
 var _rev_t: float = 0.0
 var _stuck_t: float = 0.0
-var _flip_t: float = 0.0
 var _blocked: bool = false
 var _blocked_t: float = 0.0
 var _eng: AudioStreamPlayer3D
 var _horn: AudioStreamPlayer3D
+var _crash: AudioStreamPlayer3D
+var _eng_ui: AudioStreamPlayer
+var _horn_ui: AudioStreamPlayer
 var _horn_t: float = 0.0
 var _hlights: Array = []
+var _wheels: Array = []
+var _wr: float = 0.35
 
 static func mat(c: Color, a: float = 1.0, rough: float = 0.5, metal: float = 0.0) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -101,49 +113,47 @@ func setup(s: Dictionary) -> void:
 	max_speed = s["max_speed"]
 	mass = s["mass"]
 	var dim: Vector3 = s["dim"]
+	wheelbase = maxf(dim.z * 0.6, 1.0)
 	collision_layer = 2
 	collision_mask = 1 | 2 | 4 | 8
-	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0, 0.35, 0)
-	linear_damp = 0.1
-	angular_damp = 1.0
+	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
-	bs.size = Vector3(dim.x, dim.y * 0.8, dim.z)
+	bs.size = Vector3(dim.x, dim.y * 0.9, dim.z)
 	cs.shape = bs
-	cs.position = Vector3(0, 0.45 + dim.y * 0.4, 0)
+	cs.position = Vector3(0, 0.3 + dim.y * 0.45, 0)
 	add_child(cs)
 	add_child(build_mesh(s))
-	var wr := 0.3 if is_bike else 0.35
+	_wr = 0.3 if is_bike else 0.35
 	var track := 0.22 if is_bike else dim.x * 0.5 - 0.05
 	var zf := -dim.z * 0.33
 	var zr := dim.z * 0.33
 	for i in 4:
 		var front := i < 2
 		var left := i % 2 == 0
-		var w := VehicleWheel3D.new()
-		w.position = Vector3(-track if left else track, wr + 0.2, zf if front else zr)
-		w.wheel_radius = wr
-		w.wheel_rest_length = 0.2
-		w.suspension_travel = 0.25
-		w.suspension_stiffness = 40.0
-		w.suspension_max_force = mass * 7.0
-		w.wheel_friction_slip = 3.0
-		w.wheel_roll_influence = 0.15
-		w.use_as_steering = front
-		w.use_as_traction = not front
-		add_child(w)
+		var pivot := Node3D.new()
+		pivot.position = Vector3(-track if left else track, _wr, zf if front else zr)
+		add_child(pivot)
+		var spin := Node3D.new()
+		pivot.add_child(spin)
 		var wm := MeshInstance3D.new()
 		var cm := CylinderMesh.new()
-		cm.top_radius = wr
-		cm.bottom_radius = wr
+		cm.top_radius = _wr
+		cm.bottom_radius = _wr
 		cm.height = 0.25
 		cm.radial_segments = 14
 		cm.rings = 1
 		wm.mesh = cm
 		wm.rotation_degrees = Vector3(0, 0, 90)
 		wm.material_override = mat(Color(0.04, 0.04, 0.04), 1.0, 0.9)
-		w.add_child(wm)
+		spin.add_child(wm)
+		var hub := MeshInstance3D.new()
+		var hb := BoxMesh.new()
+		hb.size = Vector3(0.27, 0.12, 0.12)
+		hub.mesh = hb
+		hub.material_override = mat(Color(0.75, 0.75, 0.78), 1.0, 0.3, 0.8)
+		spin.add_child(hub)
+		_wheels.append({"pivot": pivot, "spin": spin, "front": front})
 	_ray = RayCast3D.new()
 	_ray.position = Vector3(0, 0.8, -dim.z * 0.5)
 	_ray.target_position = Vector3(0, 0, -9.0)
@@ -151,15 +161,27 @@ func setup(s: Dictionary) -> void:
 	add_child(_ray)
 	_eng = AudioStreamPlayer3D.new()
 	_eng.stream = Sfx.get_sound("engine")
-	_eng.unit_size = 10.0
-	_eng.max_distance = 80.0
-	_eng.volume_db = -9.0
+	_eng.unit_size = 12.0
+	_eng.max_distance = 90.0
+	_eng.volume_db = -4.0
 	add_child(_eng)
 	_horn = AudioStreamPlayer3D.new()
 	_horn.stream = Sfx.get_sound("horn")
-	_horn.unit_size = 14.0
-	_horn.max_distance = 90.0
+	_horn.unit_size = 16.0
+	_horn.max_distance = 100.0
 	add_child(_horn)
+	_crash = AudioStreamPlayer3D.new()
+	_crash.stream = Sfx.get_sound("crash")
+	_crash.unit_size = 14.0
+	add_child(_crash)
+	_eng_ui = AudioStreamPlayer.new()
+	_eng_ui.stream = Sfx.get_sound("engine")
+	_eng_ui.volume_db = -6.0
+	add_child(_eng_ui)
+	_horn_ui = AudioStreamPlayer.new()
+	_horn_ui.stream = Sfx.get_sound("horn")
+	_horn_ui.volume_db = -3.0
+	add_child(_horn_ui)
 	var xs: Array = [0.0] if is_bike else [-dim.x * 0.35, dim.x * 0.35]
 	for x in xs:
 		var sl := SpotLight3D.new()
@@ -200,16 +222,15 @@ func remove_driver() -> void:
 		driver.queue_free()
 		driver = null
 
-func start_ai(r: Array, speed: float = 11.0) -> void:
+func start_ai(r: Array, spd: float = 11.0) -> void:
 	ai_on = true
 	route = r
-	cruise = speed
+	cruise = spd
 
 func _physics_process(delta: float) -> void:
 	var throttle := 0.0
 	var steer_in := 0.0
 	var brk := 0.0
-	var fwd_speed := linear_velocity.dot(-global_transform.basis.z)
 	if driver_is_player:
 		var v := Game.move_vec()
 		throttle = -v.y
@@ -217,55 +238,92 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_pressed("brake"):
 			brk = 1.0
 	elif ai_on:
-		var r := _ai_inputs(delta, fwd_speed)
+		var r := _ai_inputs(delta, speed)
 		throttle = r.x
 		steer_in = r.y
 		brk = r.z
 	else:
 		brk = 1.0
-	var f := throttle * power
-	if throttle > 0.0 and fwd_speed > max_speed:
-		f = 0.0
-	if throttle < 0.0:
-		if fwd_speed > 1.5:
-			brk = maxf(brk, 0.8)
-			f = 0.0
-		elif fwd_speed < -max_speed * 0.3:
-			f = 0.0
-	engine_force = f * Game.engine_sign
-	brake = brk * 8.0 + (0.3 if absf(throttle) < 0.05 else 0.0)
-	var lim := deg_to_rad(32.0) / (1.0 + absf(fwd_speed) * 0.07)
-	steering = move_toward(steering, steer_in * lim, delta * 3.2)
-	if global_transform.basis.y.y < 0.25:
-		_flip_t += delta
-		if _flip_t > 2.5:
-			_flip_t = 0.0
-			var yaw := global_transform.basis.get_euler().y
-			global_transform = Transform3D(Basis(Vector3.UP, yaw), global_position + Vector3(0, 1.5, 0))
-			linear_velocity = Vector3.ZERO
-			angular_velocity = Vector3.ZERO
-	else:
-		_flip_t = 0.0
-	_update_audio(delta, fwd_speed, throttle)
+	_update_audio(delta, throttle)
+	if not driver_is_player and not ai_on and absf(speed) < 0.01:
+		return
+	var acc := clampf(power / mass * 1.8, 3.0, 8.0)
+	var target := 0.0
+	if throttle > 0.0:
+		target = max_speed * throttle
+	elif throttle < 0.0:
+		target = -max_speed * 0.3 * -throttle
+	var rate := acc
+	if brk > 0.0:
+		target = 0.0
+		rate = 14.0
+	elif absf(throttle) < 0.05:
+		rate = 2.5
+	elif signf(target) != signf(speed) and absf(speed) > 0.5:
+		rate = 12.0
+	speed = move_toward(speed, target, rate * delta)
+	var lim := 0.55 / (1.0 + absf(speed) * 0.06)
+	steer_ang = move_toward(steer_ang, steer_in * lim, 2.5 * delta)
+	if absf(speed) > 0.05:
+		rotate_y(speed * tan(steer_ang) / wheelbase * delta)
+	var fwd := -global_transform.basis.z
+	velocity = fwd * speed
+	var before := speed
+	move_and_slide()
+	global_position.y = 0.0
+	var real := get_real_velocity().dot(fwd)
+	if absf(real) < absf(speed):
+		speed = real
+	if before - speed > 6.0 and absf(before) > 6.0:
+		if driver_is_player:
+			Game.play_ui("crash")
+		else:
+			_crash.play()
+	_spin_wheels(delta)
 
-func _update_audio(delta: float, fwd_speed: float, throttle: float) -> void:
-	if driver_is_player or ai_on:
-		if not _eng.playing:
-			_eng.play()
-		var sp := clampf(absf(fwd_speed) / max_speed, 0.0, 1.2)
-		_eng.pitch_scale = 0.55 + sp * 1.7 + absf(throttle) * 0.25
-		_eng.volume_db = -9.0 + absf(throttle) * 4.0 + sp * 3.0
-	elif _eng.playing:
-		_eng.stop()
+func _spin_wheels(delta: float) -> void:
+	for w in _wheels:
+		var sp: Node3D = w["spin"]
+		sp.rotation.x -= speed * delta / _wr
+		if w["front"]:
+			(w["pivot"] as Node3D).rotation.y = steer_ang
+
+func _update_audio(delta: float, throttle: float) -> void:
+	var active := driver_is_player or ai_on
+	var sp := clampf(absf(speed) / max_speed, 0.0, 1.2)
+	var pitch := 0.6 + sp * 1.8 + absf(throttle) * 0.25
+	if driver_is_player:
+		if _eng.playing:
+			_eng.stop()
+		if not _eng_ui.playing:
+			_eng_ui.play()
+		_eng_ui.pitch_scale = pitch
+		_eng_ui.volume_db = -9.0 + absf(throttle) * 4.0 + sp * 3.0
+	else:
+		if _eng_ui.playing:
+			_eng_ui.stop()
+		if ai_on:
+			if not _eng.playing:
+				_eng.play()
+			_eng.pitch_scale = pitch
+			_eng.volume_db = -5.0 + sp * 3.0
+		elif _eng.playing:
+			_eng.stop()
 	var honk := (driver_is_player and Input.is_action_pressed("horn")) or _horn_t > 0.0
 	_horn_t = maxf(0.0, _horn_t - delta)
-	if honk and not _horn.playing:
-		_horn.play()
-	elif not honk and _horn.playing:
-		_horn.stop()
+	var hp = _horn_ui if driver_is_player else _horn
+	var other = _horn if driver_is_player else _horn_ui
+	if other.playing:
+		other.stop()
+	if honk and not hp.playing:
+		hp.play()
+	elif not honk and hp.playing:
+		hp.stop()
 	var lit := driver_is_player and Game.night > 0.35
 	for l in _hlights:
 		l.visible = lit
+	if not active and speed != 0.0:
+		speed = move_toward(speed, 0.0, 10.0 * delta)
 
 func _light_dist() -> float:
 	var tl = Game.lights
